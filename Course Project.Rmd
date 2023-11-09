@@ -1,0 +1,129 @@
+---
+title: "Practical Machine Learning - Course Project"
+author: "Markku Maijala"
+date: "2023-11-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Course Project
+
+## Background 
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, the goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+
+The goal of the project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. 
+
+## Load neeeded packages
+```{r}
+library(caret)
+library(dplyr)
+library(ggplot2)
+library(rattle)
+```
+
+## Load the data
+```{r}
+pml.train = read.csv("pml-training.csv")
+pml.test = read.csv("pml-testing.csv")
+```
+
+## Clean the data
+Many of the columns have missing data in the test set so we cannot use them in the prediction, remove non-used data from the training set.
+Note that the last column is unique in plm.train ("classe") and in plm.test ("problem_id"). Remove column 1-7 since this data is irrelevant.
+
+```{r}
+#df <- pml.test
+pml.test_new <- pml.test[ , colSums(is.na(pml.test))==0]
+variables <- as.vector(colnames(pml.test_new))
+variables <- variables[1:59] #remove unique value
+pml.train_new <- select(pml.train, c(all_of(variables), classe)) #add classe
+pml.train_new <- pml.train_new[,-c(1:7)]
+pml.train_new$classe <- as.factor(pml.train_new$classe)
+```
+
+
+How did people do in the training data - investigate "classe" variable!
+```{r}
+table(pml.train_new$classe)
+
+```
+The classe varible is quite evenly distributed between A-E (A has some more values).
+
+
+## Cross validation
+Split data to training (70%) and testing (30%).
+```{r}
+inTrain <- createDataPartition(y=pml.train_new$classe, p=0.7, list=FALSE, )
+training <- pml.train_new[inTrain,]
+testing <- pml.train_new[-inTrain,]
+```
+
+
+## Predict with some algorithms
+Test some algorithm to see which one gives the best accuracy.
+
+### Set seed
+```{r}
+set.seed(1235)
+```
+
+### Tree
+```{r}
+treeFit <- train(classe ~.,data=training, method="rpart")
+treeFit
+```
+
+Accuracy check
+```{r}
+pred_tree <- predict(treeFit, testing)
+confusionMatrix(pred_tree, testing$classe)
+```
+
+The accuracy (1 - out of sample error rate) is 0.5011 for testing data, 95% confidence interval: 0.4882, 0.514
+
+
+### Random forest
+```{r}
+rfFit <- train(classe ~.,data=training, method="rf")
+rfFit
+```
+
+Accuracy check
+```{r}
+pred_rf <- predict(rfFit, testing)
+confusionMatrix(pred_rf, testing$classe)
+```
+
+The accuracy (1 - out of sample error rate) is 0.9937 for testing data, 95% confidence interval: 0.9913, 0.9956.
+The model is very accurate, but it takes a long time to train.
+
+### Boosting
+```{r}
+boostFit <- train(classe ~.,data=training, method="gbm",verbose=FALSE)
+boostFit
+```
+
+Accuracy check
+```{r}
+pred_boost <- predict(boostFit, testing)
+confusionMatrix(pred_boost, testing$classe)
+```
+
+The accuracy (1 - out of sample error rate) is 0.9619 for testing data, 95% confidence interval: 0.9567, 0.9667.
+
+
+### Model selection and Prediction
+The Random Forest model is selected as prediction model since it has the highest accuracy (or lowest out of sample error rate).
+The accuracy of the Random Forest model is 0.9937, which corresponds to out of sample error rate 0.0063, or 0.63%. In other words, the model is very good and very few error are expected in the test data predictions. The test data is only 20 cases.
+
+```{r}
+pred_classe <- predict(rfFit, pml.test)
+pred_classe <- as.data.frame(pred_classe)
+test_data <- cbind(pml.test, pred_classe)
+test_data$pred_classe
+```
+
+
